@@ -1,0 +1,18 @@
+service: goes-notify-bot
+
+plugins:
+  - serverless-plugin-typescript
+  - serverless-dotenv-plugin
+
+provider:
+  name: aws
+  runtime: nodejs16.x
+  region: us-east-1
+
+functions:
+  bot:
+    handler: src/bot.botHandler
+    events:
+      - http:
+          path: bot
+          method: post
