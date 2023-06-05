@@ -19,7 +19,7 @@ sls deploy
 4. get URL from serverless output. i.e https://otjvo96r9c.execute-api.us-east-1.amazonaws.com/dev/handler
 5. set webhook for your bot, use your URL from step 4.
 ```
-curl --request POST --url https://api.telegram.org/bot$TELEGRAM_TOKEN/setWebhook --header 'content-type: application/json' --data '{"url": "https://otjvo96r9c.execute-api.us-east-1.amazonaws.com/dev/handler"}'
+curl --request POST --url https://api.telegram.org/bot$BOT_TOKEN/setWebhook --header 'content-type: application/json' --data '{"url": https://otjvo96r9c.execute-api.us-east-1.amazonaws.com/dev/handler}'
 ```
 If you have done it correctly, you will see output like one below:
 ```
