@@ -28,7 +28,7 @@ interface Settings {
 }
 
 const settings: Settings = {
-    current_interview_date_str: "August 31, 2023",
+    current_interview_date_str: "July 12, 2023",
     enrollment_location_id: "5020"
 }
 
@@ -76,7 +76,8 @@ function lambdaResponse(statusCode: number, message: string, event: LambdaEvent)
 
 // Generate the message text
 function formatMessage(dates: string[]){
-    const msg = `New Global Entry appointments available on the following dates:\n${dates.join('\n')}`;
+    const formattedDates = dates.map(date => (`\u2022 ${date}`)); // Unicode character for bullet point (•)
+    const msg = `New Global Entry appointments available on the following dates:\n${formattedDates.join('\n')}`;
     return msg;  
 }
 
