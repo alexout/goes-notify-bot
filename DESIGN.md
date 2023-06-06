@@ -46,9 +46,35 @@ The lambda function will receive user messages from the API Gateway and respond 
 The lambda function will interact with the GOES API to check for available appointments.
 User settings will be stored in Dynamo DB
 
+### Database
+
+Data is stored in DynamoDB 
+
+table `UserSettings` schema
+
+| Field Name                 | Data Type | Description                               |
+| -------------------------- | --------- | ----------------------------------------- |
+| `userId` (Partition Key)   | String    | The unique identifier for the user.       |
+| `locationId`               | String    | The identifier of the location.           |
+| `currentAppointmentDate`   | String    | The date of the user's current appointment. |
+
+The `userId` is the partition key which is a unique identifier for each user and serves as the primary means of access to their record. This is a critical part of DynamoDB's underlying architecture which facilitates efficient data access patterns. 
+
+The `locationId` and `currentAppointmentDate` are attributes associated with each `userId` that store user-specific settings. `locationId` represents the location identifier where the user plans to have their appointment. `currentAppointmentDate` holds the date of the user's current appointment.
+
+Example:
+
+| userId    | locationId | currentAppointmentDate |
+|-----------|------------|------------------------|
+| 12345678  | 5020       | 2023-07-10             |
+| 23456789  | 3060       | 2023-08-15             |
+| 34567890  | 5020       | 2023-09-30             |
+
+In this example, `12345678`, `23456789`, and `34567890` are unique identifiers for users. The `locationId` column holds the identifier for each user's preferred location. `currentAppointmentDate` column displays the current appointment date set by each user.
+
 ### Frontend
 Telegram Bot API will be used for the bot's frontend.
-The bot will be implemented in Python using the Telegram Bot API library.
+The bot will be implemented in Typescript using the Telegraf library.
 The bot will interact with the user through Telegram's chat interface.
 The bot will send notifications to the user when an earlier appointment is available.
 ###  Cloud Architecture
