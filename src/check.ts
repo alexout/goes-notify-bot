@@ -22,7 +22,17 @@ interface LambdaResponse {
     body: string;
 }
 
-async function getDates(settings: any) {
+interface Settings {
+    current_interview_date_str: string;
+    enrollment_location_id: string;
+}
+
+const settings: Settings = {
+    current_interview_date_str: "August 31, 2023",
+    enrollment_location_id: "5020"
+}
+
+async function getDates(settings: Settings): Promise<string[]> {
     const dates: string[] = [];
     try {
         const goesURL: string = `https://ttp.cbp.dhs.gov/schedulerapi/slots?orderBy=soonest&limit=3&locationId=${settings.enrollment_location_id}&minimum=1`
@@ -31,7 +41,7 @@ async function getDates(settings: any) {
         // Parse the json
         if (!data) {
             console.info('No tests available.');
-            return;
+            return dates;
         }
 
         const currentApt = moment(settings.current_interview_date_str, 'MMMM DD, YYYY');
@@ -56,13 +66,32 @@ async function getDates(settings: any) {
     // notifyUser(dates, currentApt, settings, settings.use_gmail);
 }
 
-export const checkAppointments = async (event: LambdaEvent): Promise<LambdaResponse> => {
-    await bot.telegram.sendMessage(chatID, 'Hello, World!');  // replace 'CHAT_ID' with your Telegram chat id
+function lambdaResponse(statusCode: number, message: string, event: LambdaEvent): LambdaResponse {
     return {
-        statusCode: 200,
+        statusCode,
         body: JSON.stringify({
-            message: 'Message sent',
+            message,
             input: event,
         }),
     };
+}
+
+function formatMessage(dates: string[]){
+    const formattedDates = dates.map(date => {
+        const formattedDate = moment(date).format('MMMM Do YYYY, h:mm:ss a');
+        return `\u2022 ${formattedDate}`; // Unicode character for bullet point (•)
+    });
+      
+    // Generate the message text
+    const msg = `New Global Entry appointments available on the following dates:\n${formattedDates.join('\n')}`;
+    return msg;  
+}
+
+export const checkAppointments = async (event: LambdaEvent): Promise<LambdaResponse> => {
+    const dates = await getDates(settings);
+    if (!dates.length) {
+        return lambdaResponse(200, 'No new dates', event);
+    }
+    await bot.telegram.sendMessage(chatID, formatMessage(dates));
+    return lambdaResponse(200, 'User Notification Sent', event);
 };
