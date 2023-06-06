@@ -74,14 +74,9 @@ function lambdaResponse(statusCode: number, message: string, event: LambdaEvent)
     };
 }
 
+// Generate the message text
 function formatMessage(dates: string[]){
-    const formattedDates = dates.map(date => {
-        const formattedDate = moment(date).format('MMMM Do YYYY, h:mm:ss a');
-        return `\u2022 ${formattedDate}`; // Unicode character for bullet point (•)
-    });
-      
-    // Generate the message text
-    const msg = `New Global Entry appointments available on the following dates:\n${formattedDates.join('\n')}`;
+    const msg = `New Global Entry appointments available on the following dates:\n${dates.join('\n')}`;
     return msg;  
 }
 
