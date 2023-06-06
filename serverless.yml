@@ -17,10 +17,10 @@ functions:
       - http:
           path: bot
           method: post
-  # check:
-  #   handler: src/check.checkAppointments
-  #   events:
-  #     - schedule: rate(15 minutes)
+  check:
+    handler: src/check.checkAppointments
+    events:
+      - schedule: rate(15 minutes)
 
 custom:
   esbuild:
