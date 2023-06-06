@@ -59,11 +59,9 @@ async function getDates(settings: Settings): Promise<string[]> {
         console.log(dates);
         return dates;
     } catch (error) {
-        console.error("Something went wrong when trying to obtain the openings");
-        return dates;
+        console.error("Something went wrong when trying to obtain the openings:", error);
+        throw new Error("Failed to retrieve dates from the external API.");
     }
-    //const msg = `Found new appointment(s) in location ${settings.enrollment_location_id} on ${dates[0]} (current is on ${currentApt.format('MMMM DD, YYYY @ hh:mm a')}!)`;
-    // notifyUser(dates, currentApt, settings, settings.use_gmail);
 }
 
 function lambdaResponse(statusCode: number, message: string, event: LambdaEvent): LambdaResponse {
@@ -88,10 +86,15 @@ function formatMessage(dates: string[]){
 }
 
 export const checkAppointments = async (event: LambdaEvent): Promise<LambdaResponse> => {
-    const dates = await getDates(settings);
-    if (!dates.length) {
-        return lambdaResponse(200, 'No new dates', event);
+    try {
+        const dates = await getDates(settings);
+        if (!dates.length) {
+            return lambdaResponse(200, 'No new dates', event);
+        }
+        await bot.telegram.sendMessage(chatID, formatMessage(dates));
+        return lambdaResponse(200, 'User Notification Sent', event);
+    } catch (error) {
+        console.error("Error occurred while checking appointments:", error);
+        return lambdaResponse(500, error.message, event);
     }
-    await bot.telegram.sendMessage(chatID, formatMessage(dates));
-    return lambdaResponse(200, 'User Notification Sent', event);
 };
