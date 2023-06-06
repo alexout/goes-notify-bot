@@ -16,3 +16,7 @@ functions:
       - http:
           path: bot
           method: post
+
+custom:
+  serverless-plugin-typescript:
+    module: commonjs
