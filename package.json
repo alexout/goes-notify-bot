@@ -13,8 +13,7 @@
 	"dependencies": {
 		"moment": "^2.29.4",
 		"serverless-http": "^3.1.1",
-		"telegraf": "^4.11.2",
-		"telegraf-command-parts": "^1.0.3"
+		"telegraf": "^4.11.2"
 	},
 	"devDependencies": {
 		"esbuild": "^0.17.19",

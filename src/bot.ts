@@ -1,5 +1,4 @@
-import { Telegraf, Middleware } from 'telegraf';
-import commandParts from 'telegraf-command-parts';
+import { Telegraf } from 'telegraf';
 import serverless from 'serverless-http';
 import { DynamoDB } from 'aws-sdk';
 import moment from 'moment';
@@ -7,9 +6,6 @@ import moment from 'moment';
 const token: string = process.env.BOT_TOKEN ?? exitWhenEnvVariableNotDefined('BOT_TOKEN');
 
 const bot = new Telegraf(token);
-
-// Use commandParts middleware
-bot.use(commandParts() as Middleware<any>);
 
 function exitWhenEnvVariableNotDefined(variableName: string): never {
     console.error(`Environment variable ${variableName} is not defined.`);
@@ -28,7 +24,7 @@ const dynamoDB = new DynamoDB.DocumentClient();
 
 bot.command('location', async (ctx) => {
   const userId = ctx.from.id.toString();
-  const locationId = ctx.state.command.args;
+  const locationId = commandArgs(ctx.message.text);
   if(!locationId) {
     ctx.reply("Please specify the location id. List of all location codes: https://github.com/alexout/goes-notify-bot/blob/main/GOES%20Codes.md Example usage: /setlocation 5020");
   } else {
@@ -54,30 +50,27 @@ bot.command('location', async (ctx) => {
 
 bot.command('appointment', async (ctx) => {
     const userId = ctx.from.id.toString();
-    const dateStr = ctx.state.command.args;
-  
-    const formattedDate = formatDate(dateStr);
-    
-    if(!formattedDate) {
+    const dateStr = commandArgs(ctx.message.text);
+    if(!dateStr) {
       ctx.reply("Please set your current appointment date. Use any format you like Example usage: /setappointment April 20, 2023");
     } else {
-      const params = {
-        TableName: 'UserSettings',
-        Key: { userId },
-        UpdateExpression: 'set currentAppointmentDate = :currentAppointmentDate',
-        ExpressionAttributeValues: {
-          ':currentAppointmentDate': formattedDate,
-        },
-        ReturnValues: 'UPDATED_NEW',
-      };
-  
-      try {
-        await dynamoDB.update(params).promise();
-        ctx.reply('Your appointment date has been set successfully!');
-      } catch (err) {
-        console.error('DynamoDB error:', err);
-        ctx.reply('Failed to set your appointment date. Please try again later.');
-      }
+        const formattedDate = formatDate(dateStr);
+        const params = {
+            TableName: 'UserSettings',
+            Key: { userId },
+            UpdateExpression: 'set currentAppointmentDate = :currentAppointmentDate',
+            ExpressionAttributeValues: {
+            ':currentAppointmentDate': formattedDate,
+            },
+            ReturnValues: 'UPDATED_NEW',
+        };
+        try {
+            await dynamoDB.update(params).promise();
+            ctx.reply('Your appointment date has been set successfully!');
+        } catch (err) {
+            console.error('DynamoDB error:', err);
+            ctx.reply('Failed to set your appointment date. Please try again later.');
+        }
     }
 });
 
@@ -102,6 +95,12 @@ function formatDate(date) {
     }
   
     return null;
+  }
+
+  function commandArgs(message: string): string {
+    const commandRemovedArray= message.split(' ').slice(1);
+    const result = commandRemovedArray.join(' ');
+    return result;
   }
 
 export const botHandler = serverless(bot.webhookCallback("/bot"));

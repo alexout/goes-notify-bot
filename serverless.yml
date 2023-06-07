@@ -7,6 +7,8 @@ plugins:
 provider:
   name: aws
   runtime: nodejs14.x
+  environment:
+    NODE_OPTIONS: "--enable-source-maps"
   lambdaHashingVersion: 20201221
   region: us-east-1
   iamRoleStatements:
