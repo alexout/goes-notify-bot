@@ -7,8 +7,16 @@ plugins:
 provider:
   name: aws
   runtime: nodejs14.x
+  environment:
+    NODE_OPTIONS: "--enable-source-maps"
   lambdaHashingVersion: 20201221
   region: us-east-1
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:UpdateItem
+      Resource: 
+        Fn::GetAtt: [ UserSettings, Arn ]
 
 functions:
   bot:
@@ -28,3 +36,19 @@ custom:
     minify: true
     sourcemap: true
     target: 'node14'
+
+resources:
+  Resources:
+    UserSettings:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: UserSettings
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
