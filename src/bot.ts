@@ -1,26 +1,101 @@
-import { Telegraf } from 'telegraf';
+import { Telegraf, Scenes, session } from 'telegraf';
 import serverless from 'serverless-http';
 import { DynamoDB } from 'aws-sdk';
 import moment from 'moment';
 
-const token: string = process.env.BOT_TOKEN ?? exitWhenEnvVariableNotDefined('BOT_TOKEN');
-
-const bot = new Telegraf(token);
-
-function exitWhenEnvVariableNotDefined(variableName: string): never {
-    console.error(`Environment variable ${variableName} is not defined.`);
-    process.exit(2);
-}
-
-bot.start((ctx) => {
-  const userName = ctx.message.from.first_name;
-  ctx.reply(`Hello, ${userName}! Welcome to the bot.`);
-});
-
-bot.hears('test', ctx => ctx.reply(`✅ Working fine! \n Chat ID: ${ctx.chat?.id}`));
-
 // Initialize DynamoDB Document Client
 const dynamoDB = new DynamoDB.DocumentClient();
+
+// Configure scene
+const configureScene = new Scenes.WizardScene<Scenes.WizardContext>('configure',
+  async  (ctx: Scenes.WizardContext) => {
+    await ctx.reply(
+      'Hi there! I can help you get notified when there is an earlier appointment available for your GOES interview. Please enter your current appointment date, for example, "April 20, 2023".'
+    );
+    return ctx.wizard.next();
+  },
+  async  (ctx: Scenes.WizardContext) => {
+    let appointmentDate: string | undefined;
+    if ('text' in ctx.message!) {
+        appointmentDate = ctx.message!.text;
+    } else {
+        // User sent something that is not text - sticker, video or photo
+        ctx.reply('Please respond with Date of your appointment');
+        return;
+    }
+
+    if (!appointmentDate) {
+      ctx.reply('Invalid date format. Please enter your current appointment date. I understand many formats, but following is perffered "Month, Day Year", for example, "April 20, 2023".');
+      return;
+    }
+
+    ctx.wizard.state.appointmentDate = appointmentDate as string;
+
+    ctx.reply(
+      'Great! Which enrollment center would you like me to check? List of the centers is available here (link). Reply with center ID.'
+    );
+    return ctx.wizard.next();
+  },
+  async (ctx: Scenes.WizardContext) => {
+    let locationId: string | undefined;
+    if ('text' in ctx.message!) {
+        locationId = ctx.message!.text;
+    } else {
+        // User sent something that is not text - sticker, video or photo
+        ctx.reply('Please respond with Enrollment Center ID.');
+        return;
+    }
+    if (!locationId || isNaN(Number(locationId))) {
+      ctx.reply('Invalid center ID. Enrollment Center ID must be a number.');
+      return;
+    }
+
+    const userId = ctx.from?.id?.toString();
+
+    if (!userId) {
+      ctx.reply('User ID not found.');
+      return;
+    }
+
+    const params = {
+      TableName: 'UserSettings',
+      Key: { userId },
+      UpdateExpression: 'set locationId = :locationId, currentAppointmentDate = :currentAppointmentDate',
+      ExpressionAttributeValues: {
+        ':locationId': locationId,
+        ':currentAppointmentDate': ctx.wizard.state.appointmentDate
+      },
+      ReturnValues: 'UPDATED_NEW',
+    };
+
+    try {
+      await dynamoDB.update(params).promise();
+      ctx.reply('Configuration saved successfully!');
+    } catch (err) {
+      console.error('DynamoDB error:', err);
+      ctx.reply('Failed to save the configuration. Please try again later.');
+    }
+
+    ctx.scene.leave();
+  }
+);
+
+
+const token: string = process.env.BOT_TOKEN ?? exitWhenEnvVariableNotDefined('BOT_TOKEN');
+const bot = new Telegraf<Scenes.WizardContext>(token);
+const stage = new Scenes.Stage<Scenes.WizardContext>([configureScene]);
+
+bot.use(session());
+bot.use(stage.middleware());
+
+bot.start((ctx) => {
+    const userName = ctx.message.from.first_name;
+    ctx.reply(`Hello, ${userName}! Welcome to the bot.`);
+});
+
+bot.command('configure', (ctx) => ctx.scene.enter('configure'));
+  
+bot.hears('test', ctx => ctx.reply(`✅ Working fine! \n Chat ID: ${ctx.chat?.id}`));
 
 bot.command('location', async (ctx) => {
   const userId = ctx.from.id.toString();
@@ -51,10 +126,10 @@ bot.command('location', async (ctx) => {
 bot.command('appointment', async (ctx) => {
     const userId = ctx.from.id.toString();
     const dateStr = commandArgs(ctx.message.text);
-    if(!dateStr) {
+    const formattedDate = formatDate(dateStr);
+    if(!formattedDate) {
       ctx.reply("Please set your current appointment date. Use any format you like Example usage: /setappointment April 20, 2023");
     } else {
-        const formattedDate = formatDate(dateStr);
         const params = {
             TableName: 'UserSettings',
             Key: { userId },
@@ -97,10 +172,15 @@ function formatDate(date) {
     return null;
   }
 
-  function commandArgs(message: string): string {
+function commandArgs(message: string): string {
     const commandRemovedArray= message.split(' ').slice(1);
     const result = commandRemovedArray.join(' ');
     return result;
-  }
+}
+
+function exitWhenEnvVariableNotDefined(variableName: string): never {
+    console.error(`Environment variable ${variableName} is not defined.`);
+    process.exit(2);
+}
 
 export const botHandler = serverless(bot.webhookCallback("/bot"));
