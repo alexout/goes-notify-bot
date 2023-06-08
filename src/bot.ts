@@ -6,6 +6,11 @@ import moment from 'moment';
 // Initialize DynamoDB Document Client
 const dynamoDB = new DynamoDB.DocumentClient();
 
+// Interface for storing data in state for configuration wizard
+interface ConfigurationWizardState {
+    appointmentDate?: string;
+  }
+
 // Configure scene
 const configureScene = new Scenes.WizardScene<Scenes.WizardContext>('configure',
   async  (ctx: Scenes.WizardContext) => {
@@ -23,16 +28,16 @@ const configureScene = new Scenes.WizardScene<Scenes.WizardContext>('configure',
         ctx.reply('Please respond with Date of your appointment');
         return;
     }
-
-    if (!appointmentDate) {
+    const formattedAppointmentDate = formatDate(appointmentDate);
+    if (!formattedAppointmentDate) {
       ctx.reply('Invalid date format. Please enter your current appointment date. I understand many formats, but following is perffered "Month, Day Year", for example, "April 20, 2023".');
       return;
     }
 
-    ctx.wizard.state.appointmentDate = appointmentDate as string;
+    (ctx.wizard.state as ConfigurationWizardState).appointmentDate = formattedAppointmentDate;
 
     ctx.reply(
-      'Great! Which enrollment center would you like me to check? List of the centers is available here (link). Reply with center ID.'
+      'Great! Which enrollment center would you like me to check? List of the centers is available here (https://github.com/alexout/goes-notify-bot/blob/main/GOES%20Codes.md). Reply with center ID.'
     );
     return ctx.wizard.next();
   },
@@ -46,7 +51,7 @@ const configureScene = new Scenes.WizardScene<Scenes.WizardContext>('configure',
         return;
     }
     if (!locationId || isNaN(Number(locationId))) {
-      ctx.reply('Invalid center ID. Enrollment Center ID must be a number.');
+      ctx.reply('Enrollment Center ID must be a number. Please enter it again.');
       return;
     }
 
@@ -56,21 +61,21 @@ const configureScene = new Scenes.WizardScene<Scenes.WizardContext>('configure',
       ctx.reply('User ID not found.');
       return;
     }
-
+    const currentAppointmentDate = (ctx.wizard.state as ConfigurationWizardState).appointmentDate;
     const params = {
       TableName: 'UserSettings',
       Key: { userId },
       UpdateExpression: 'set locationId = :locationId, currentAppointmentDate = :currentAppointmentDate',
       ExpressionAttributeValues: {
         ':locationId': locationId,
-        ':currentAppointmentDate': ctx.wizard.state.appointmentDate
+        ':currentAppointmentDate': currentAppointmentDate,
       },
       ReturnValues: 'UPDATED_NEW',
     };
 
     try {
       await dynamoDB.update(params).promise();
-      ctx.reply('Configuration saved successfully!');
+      ctx.reply(`All set! I will check for availablity every 5 minutes and will send a message if I find something earlier then ${currentAppointmentDate}.`);
     } catch (err) {
       console.error('DynamoDB error:', err);
       ctx.reply('Failed to save the configuration. Please try again later.');
@@ -128,7 +133,7 @@ bot.command('appointment', async (ctx) => {
     const dateStr = commandArgs(ctx.message.text);
     const formattedDate = formatDate(dateStr);
     if(!formattedDate) {
-      ctx.reply("Please set your current appointment date. Use any format you like Example usage: /setappointment April 20, 2023");
+      ctx.reply("Please set your current appointment date. Use any format you like. Example usage: /appointment April 20, 2023");
     } else {
         const params = {
             TableName: 'UserSettings',
