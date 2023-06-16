@@ -12,7 +12,7 @@ provider:
     # DB_INSTANCE_ARN:
     #   Fn::GetAtt: [ RDSInstance, Arn ]
     # DB_SECRET_ARN:
-    #   Ref: RDSInstanceSecret
+    #   Ref: RDSInstanceMasterSecret
     # VPC_SUBNET_IDS:
     #   Ref: PrivateSubnet
     # VPC_SECURITY_GROUP_IDS:
@@ -24,7 +24,7 @@ provider:
       Action:
         - secretsmanager:GetSecretValue
       Resource:
-        Ref: RDSInstanceSecret
+        Ref: RDSInstanceAppSecret
   vpc:
     securityGroupIds:
       - Ref: LambdaExecutionSecurityGroup
@@ -136,9 +136,8 @@ resources:
       Properties:
         Engine: postgres
         # EngineVersion: 15.3
-        MasterUsername: goesAdmin
-        MasterUserPassword:
-          Ref: RDSInstanceSecret
+        MasterUsername: !Sub '{{resolve:secretsmanager:${RDSInstanceMasterSecret}::username}}'
+        MasterUserPassword: !Sub '{{resolve:secretsmanager:${RDSInstanceMasterSecret}::password}}'
         DBInstanceIdentifier: goes-notify-bot-db
         AllocatedStorage: 20
         DBInstanceClass: db.t4g.micro
@@ -147,12 +146,36 @@ resources:
         DBSubnetGroupName:
           Ref: DBSubnetGroup
 
-    RDSInstanceSecret:
+    RDSInstanceMasterSecret:
       Type: AWS::SecretsManager::Secret
       Properties:
         Name: goes-notify-bot-db-credentials
         GenerateSecretString:
-          SecretStringTemplate: '{"username": "goes-admin"}'
+          SecretStringTemplate: '{"username": "goesAdmin"}'
+          GenerateStringKey: "password"
+          PasswordLength: 22
+          ExcludeCharacters: '"@/\\'
+
+    SecretRDSInstanceAttachmentMaster:
+      Type: AWS::SecretsManager::SecretTargetAttachment
+      Properties:
+        SecretId: !Ref RDSInstanceMasterSecret
+        TargetId: !Ref RDSInstance
+        TargetType: AWS::RDS::DBInstance
+
+    SecretRDSInstanceAttachmentApp:
+      Type: AWS::SecretsManager::SecretTargetAttachment
+      Properties:
+        SecretId: !Ref RDSInstanceAppSecret
+        TargetId: !Ref RDSInstance
+        TargetType: AWS::RDS::DBInstance
+
+    RDSInstanceAppSecret:
+      Type: AWS::SecretsManager::Secret
+      Properties:
+        Name: goes-notify-bot-app-db-credentials
+        GenerateSecretString:
+          SecretStringTemplate: '{"username": "goesapp"}'
           GenerateStringKey: "password"
           PasswordLength: 22
           ExcludeCharacters: '"@/\\'
