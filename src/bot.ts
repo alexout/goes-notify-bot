@@ -10,7 +10,7 @@ const secretsManager = new SecretsManager();
 // Interface for storing data in state for configuration wizard
 interface ConfigurationWizardState {
     appointmentDate: string;
-  }
+}
 
 
 async function getPostgresCredentials(): Promise<{ username: string; password: string; host: string; port: number; dbInstanceIdentifier: string }> {
@@ -79,39 +79,28 @@ const configureScene = new Scenes.WizardScene<Scenes.WizardContext>('configure',
     const currentAppointmentDate = (ctx.wizard.state as ConfigurationWizardState).appointmentDate;
 
     const { username, password, host, port } = await getPostgresCredentials();
-
     const connectionString = `postgres://${username}:${password}@${host}:${port}/${username}`;
-
     const pool = await createPool(connectionString, {
       ssl: { rejectUnauthorized: false }, // Adjust SSL options as needed
     });
-    //const client = await pool.connect();
 
-    const query = `
-    INSERT INTO settings (userId, locationId, currentAppointmentDate)
-    VALUES (${userId}, ${locationId}, ${currentAppointmentDate})
-    ON CONFLICT (userId) DO UPDATE
-    SET locationId = excluded.locationId,
-        currentAppointmentDate = excluded.currentAppointmentDate
-  `;
-
-  try {
-    await pool.connect( async (connection) => {
-      return connection.query(sql.typeAlias('void')`
-        INSERT INTO settings (userId, locationId, currentAppointmentDate)
-        VALUES (${userId}, ${locationId}, ${currentAppointmentDate})
-        ON CONFLICT (userId) DO UPDATE
-        SET locationId = excluded.locationId,
-            currentAppointmentDate = excluded.currentAppointmentDate
-      `);
-    });
-    ctx.reply(`All set! I will check for availability every 5 minutes and will send a message if I find something earlier than ${currentAppointmentDate}.`);
-  } catch (err) {
-    console.error('Slonik error:', err);
-    ctx.reply('Failed to save the configuration. Please try again later.');
-  }
-    ctx.scene.leave();
-  }
+    try {
+      await pool.connect( async (connection) => {
+        return connection.query(sql.typeAlias('void')`
+          INSERT INTO settings (userId, locationId, currentAppointmentDate)
+          VALUES (${userId}, ${locationId}, ${currentAppointmentDate})
+          ON CONFLICT (userId) DO UPDATE
+          SET locationId = excluded.locationId,
+              currentAppointmentDate = excluded.currentAppointmentDate
+        `);
+      });
+      ctx.reply(`All set! I will check for availability every 5 minutes and will send a message if I find something earlier than ${currentAppointmentDate}.`);
+    } catch (err) {
+      console.error('Slonik error:', err);
+      ctx.reply('Failed to save the configuration. Please try again later.');
+    }
+      ctx.scene.leave();
+    }
 );
 
 
