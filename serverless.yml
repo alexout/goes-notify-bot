@@ -135,6 +135,42 @@ resources:
         RouteTableId:
           Ref: PublicRouteTable
 
+    NATGatewayEIP:
+      Type: "AWS::EC2::EIP"
+      DependsOn: "VPCGatewayAttachment"
+      Properties:
+        Domain: vpc
+
+    NATGateway:
+      Type: "AWS::EC2::NatGateway"
+      Properties:
+        AllocationId: !GetAtt NATGatewayEIP.AllocationId
+        SubnetId: !Ref PublicSubnet
+
+    PrivateRouteTable:
+      Type: "AWS::EC2::RouteTable"
+      Properties:
+        VpcId: !Ref PrivateVPC
+
+    PrivateRoute:
+      Type: "AWS::EC2::Route"
+      Properties:
+        RouteTableId: !Ref PrivateRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        NatGatewayId: !Ref NATGateway
+
+    PrivateSubnet1RouteTableAssociation:
+      Type: "AWS::EC2::SubnetRouteTableAssociation"
+      Properties:
+        SubnetId: !Ref PrivateSubnet1
+        RouteTableId: !Ref PrivateRouteTable
+
+    PrivateSubnet2RouteTableAssociation:
+      Type: "AWS::EC2::SubnetRouteTableAssociation"
+      Properties:
+        SubnetId: !Ref PrivateSubnet2
+        RouteTableId: !Ref PrivateRouteTable
+
     RDSInstance:
       Type: AWS::RDS::DBInstance
       Properties:
@@ -155,7 +191,7 @@ resources:
       Properties:
         Name: goes-notify-bot-db-credentials
         GenerateSecretString:
-          SecretStringTemplate: '{"username": "goesAdmin"}'
+          SecretStringTemplate: '{"username": "goesadmin"}'
           GenerateStringKey: "password"
           PasswordLength: 22
           ExcludeCharacters: '"@/\\'
