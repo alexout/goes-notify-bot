@@ -13,6 +13,8 @@ provider:
     lambda: true
   environment:
     NODE_OPTIONS: "--enable-source-maps"
+    POSTGRES_SECRET_ARN:
+      Ref: RDSInstanceAppSecret
     # DB_INSTANCE_ARN:
     #   Fn::GetAtt: [ RDSInstance, Arn ]
     # DB_SECRET_ARN:

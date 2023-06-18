@@ -14,8 +14,8 @@ interface ConfigurationWizardState {
 
 
 async function getPostgresCredentials(): Promise<{ username: string; password: string; host: string; port: number; dbInstanceIdentifier: string }> {
-  const secretName = process.env.POSTGRES_SECRET_NAME ?? exitWhenEnvVariableNotDefined('POSTGRES_SECRET_NAME');
-  const secret = await secretsManager.getSecretValue({ SecretId: secretName }).promise();
+  const secretArn = process.env.POSTGRES_SECRET_ARN ?? exitWhenEnvVariableNotDefined('POSTGRES_SECRET_ARN');
+  const secret = await secretsManager.getSecretValue({ SecretId: secretArn }).promise();
 
   if (!secret.SecretString) {
     throw new Error('Failed to retrieve PostgreSQL secret.');
