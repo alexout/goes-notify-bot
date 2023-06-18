@@ -1,15 +1,34 @@
 import { Telegraf, Scenes, session } from 'telegraf';
 import serverless from 'serverless-http';
-import { DynamoDB } from 'aws-sdk';
+import { getConnectedClient } from './db';
+import { settingsInsertQuery } from './queries';
+import { SecretsManager } from 'aws-sdk';
 import moment from 'moment';
 
-// Initialize DynamoDB Document Client
-const dynamoDB = new DynamoDB.DocumentClient();
+// Initialize Secrets Manager client
+const secretsManager = new SecretsManager();
 
 // Interface for storing data in state for configuration wizard
 interface ConfigurationWizardState {
-    appointmentDate?: string;
+    appointmentDate: string;
+}
+
+
+async function getPostgresCredentials(): Promise<{ username: string; password: string; host: string; port: number; dbInstanceIdentifier: string }> {
+  const secretArn = process.env.POSTGRES_SECRET_ARN ?? exitWhenEnvVariableNotDefined('POSTGRES_SECRET_ARN');
+  const secret = await secretsManager.getSecretValue({ SecretId: secretArn }).promise();
+
+  if (!secret.SecretString) {
+    throw new Error('Failed to retrieve PostgreSQL secret.');
   }
+  const { username, password, host, port, dbInstanceIdentifier } = JSON.parse(secret.SecretString);
+  if (!username || !password || !host || !dbInstanceIdentifier || port === undefined) {
+    throw new Error('Failed to retrieve necessary Postgres credentials, some variables are not set in the secret');
+  }  
+  
+  return { username, password, host, port, dbInstanceIdentifier };
+}
+  
 
 // Configure scene
 const configureScene = new Scenes.WizardScene<Scenes.WizardContext>('configure',
@@ -42,7 +61,7 @@ const configureScene = new Scenes.WizardScene<Scenes.WizardContext>('configure',
     return ctx.wizard.next();
   },
   async (ctx: Scenes.WizardContext) => {
-    let locationId: string | undefined;
+    let locationId: string;
     if ('text' in ctx.message!) {
         locationId = ctx.message!.text;
     } else {
@@ -62,27 +81,22 @@ const configureScene = new Scenes.WizardScene<Scenes.WizardContext>('configure',
       return;
     }
     const currentAppointmentDate = (ctx.wizard.state as ConfigurationWizardState).appointmentDate;
-    const params = {
-      TableName: 'UserSettings',
-      Key: { userId },
-      UpdateExpression: 'set locationId = :locationId, currentAppointmentDate = :currentAppointmentDate',
-      ExpressionAttributeValues: {
-        ':locationId': locationId,
-        ':currentAppointmentDate': currentAppointmentDate,
-      },
-      ReturnValues: 'UPDATED_NEW',
-    };
 
     try {
-      await dynamoDB.update(params).promise();
-      ctx.reply(`All set! I will check for availablity every 5 minutes and will send a message if I find something earlier then ${currentAppointmentDate}.`);
+      const client = await getConnectedClient();
+      await settingsInsertQuery.run({
+        userId,
+        locationId,
+        currentAppointmentDate
+      }, client);
+      ctx.reply(`All set! I will check for availability every 5 minutes and will send a message if I find something earlier than ${currentAppointmentDate}.`);  
+      await client.end();    
     } catch (err) {
-      console.error('DynamoDB error:', err);
+      console.error('pg error:', err);
       ctx.reply('Failed to save the configuration. Please try again later.');
     }
-
-    ctx.scene.leave();
-  }
+      ctx.scene.leave();
+    }
 );
 
 
@@ -101,58 +115,6 @@ bot.start((ctx) => {
 bot.command('configure', (ctx) => ctx.scene.enter('configure'));
   
 bot.hears('test', ctx => ctx.reply(`✅ Working fine! \n Chat ID: ${ctx.chat?.id}`));
-
-bot.command('location', async (ctx) => {
-  const userId = ctx.from.id.toString();
-  const locationId = commandArgs(ctx.message.text);
-  if(!locationId) {
-    ctx.reply("Please specify the location id. List of all location codes: https://github.com/alexout/goes-notify-bot/blob/main/GOES%20Codes.md Example usage: /setlocation 5020");
-  } else {
-    const params = {
-      TableName: 'UserSettings',
-      Key: { userId },
-      UpdateExpression: 'set locationId = :locationId',
-      ExpressionAttributeValues: {
-        ':locationId': locationId,
-      },
-      ReturnValues: 'UPDATED_NEW',
-    };
-
-    try {
-      await dynamoDB.update(params).promise();
-      ctx.reply('Your location has been set successfully!');
-    } catch (err) {
-      console.error('DynamoDB error:', err);
-      ctx.reply('Failed to set your location. Please try again later.');
-    }
-  }
-});
-
-bot.command('appointment', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    const dateStr = commandArgs(ctx.message.text);
-    const formattedDate = formatDate(dateStr);
-    if(!formattedDate) {
-      ctx.reply("Please set your current appointment date. Use any format you like. Example usage: /appointment April 20, 2023");
-    } else {
-        const params = {
-            TableName: 'UserSettings',
-            Key: { userId },
-            UpdateExpression: 'set currentAppointmentDate = :currentAppointmentDate',
-            ExpressionAttributeValues: {
-            ':currentAppointmentDate': formattedDate,
-            },
-            ReturnValues: 'UPDATED_NEW',
-        };
-        try {
-            await dynamoDB.update(params).promise();
-            ctx.reply('Your appointment date has been set successfully!');
-        } catch (err) {
-            console.error('DynamoDB error:', err);
-            ctx.reply('Failed to set your appointment date. Please try again later.');
-        }
-    }
-});
 
 function formatDate(date) {
     const formats = [

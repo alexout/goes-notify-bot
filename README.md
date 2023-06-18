@@ -8,10 +8,7 @@ Inspired by https://github.com/Drewster727/goes-notify
 # Deployment
 
 1. Get web token from @BotFather
-2. Set environment variable
-```
-
-```
+2. Set environment variables
 3. Deploy the endpoint
 ```
 sls deploy
@@ -24,6 +21,27 @@ curl --request POST --url https://api.telegram.org/bot$BOT_TOKEN/setWebhook --he
 If you have done it correctly, you will see output like one below:
 ```
 {"ok":true,"result":true,"description":"Webhook was set"}
+```
+6. Create jumphost instance, go to AWS console, select Private VPC and Public subnet (10.0.3.0/24) 
+7. SSH into instance, and install psql
+```
+sudo dnf install postgresql15
+```
+See https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ConnectToPostgreSQLInstance.html
+
+8. Connect to the database
+```
+psql -U goesAdmin -h goes-notify-bot-db.comflmc7wvz7.us-east-1.rds.amazonaws.com -p 5432 -d postgres -W
+```
+
+9. Create app user
+```
+postgres=> create user goesapp with encrypted password '<password from secret>';
+CREATE ROLE
+postgres=> create database goesapp;
+CREATE DATABASE
+postgres=> grant all privileges on database goesapp to goesapp;
+GRANT
 ```
 
 ## License

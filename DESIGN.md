@@ -44,23 +44,39 @@ AWS Lambda functions will be used as the compute layer.
 AWS API Gateway will be used for RESTful API interface to the Telegram Bot.
 The lambda function will receive user messages from the API Gateway and respond to them accordingly.
 The lambda function will interact with the GOES API to check for available appointments.
-User settings will be stored in Dynamo DB
 
 ### Database
 
-Data is stored in DynamoDB 
+#### Selected database
+ * postgres
+ * pgtyped https://pgtyped.dev/
+ * migrations - decided to run manually from EC2 instance for now, storing sql files in migrations folder
+
+### Considered databases
+
+### Considered ORMs
+* Slonik - tried implementing, but ran into issues with using sql tagging, wish it had better documentation
+* sequelize - connection pooling setup in lambda (is complicated)[https://sequelize.org/docs/v6/other-topics/aws-lambda/]
+* typeORM - too complicataed for the task
+* knexjs - just a query builder, not solving any problems from my point of view
+
+#### NOT using DynamoDB
+Original implementation was done with DynamoDB 
 
 table `UserSettings` schema
 
-| Field Name                 | Data Type | Description                               |
-| -------------------------- | --------- | ----------------------------------------- |
-| `userId` (Partition Key)   | String    | The unique identifier for the user.       |
-| `locationId`               | String    | The identifier of the location.           |
-| `currentAppointmentDate`   | String    | The date of the user's current appointment. |
+| Field Name                            | Data Type | Description                               |
+| ------------------------------------- | --------- | ----------------------------------------- |
+| `userId` (Partition Key)              | String    | The unique identifier for the user.       |
+| `locationId`                          | String    | The identifier of the location.           |
+| `currentAppointmentDate` (Search key) | String    | The date of the user's current appointment. |
 
 The `userId` is the partition key which is a unique identifier for each user and serves as the primary means of access to their record. This is a critical part of DynamoDB's underlying architecture which facilitates efficient data access patterns. 
 
 The `locationId` and `currentAppointmentDate` are attributes associated with each `userId` that store user-specific settings. `locationId` represents the location identifier where the user plans to have their appointment. `currentAppointmentDate` holds the date of the user's current appointment.
+
+`currentAppointmentDate` is created as a search key. Sicne DynamoDB doesn't support date format, I planned to use
+`YYYY-MM-DD` date format which would enable querying users with appointments later then a given date.
 
 Example:
 
@@ -70,7 +86,7 @@ Example:
 | 23456789  | 3060       | 2023-08-15             |
 | 34567890  | 5020       | 2023-09-30             |
 
-In this example, `12345678`, `23456789`, and `34567890` are unique identifiers for users. The `locationId` column holds the identifier for each user's preferred location. `currentAppointmentDate` column displays the current appointment date set by each user.
+In this example, `12345678`, `23456789`, and `34567890` are unique identifiers for users. The `locationId` column holds the identifier for each user's enrolment center.
 
 ### Frontend
 Telegram Bot API will be used for the bot's frontend.

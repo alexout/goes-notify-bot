@@ -7,16 +7,36 @@ plugins:
 provider:
   name: aws
   runtime: nodejs14.x
+  stage: prod
+  tracing:
+    apiGateway: true
+    lambda: true
   environment:
     NODE_OPTIONS: "--enable-source-maps"
+    POSTGRES_SECRET_ARN:
+      Ref: RDSInstanceAppSecret
+    # DB_INSTANCE_ARN:
+    #   Fn::GetAtt: [ RDSInstance, Arn ]
+    # DB_SECRET_ARN:
+    #   Ref: RDSInstanceMasterSecret
+    # VPC_SUBNET_IDS:
+    #   Ref: PrivateSubnet
+    # VPC_SECURITY_GROUP_IDS:
+    #   Ref: LambdaExecutionSecurityGroup
   lambdaHashingVersion: 20201221
   region: us-east-1
   iamRoleStatements:
     - Effect: Allow
       Action:
-        - dynamodb:UpdateItem
-      Resource: 
-        Fn::GetAtt: [ UserSettings, Arn ]
+        - secretsmanager:GetSecretValue
+      Resource:
+        Ref: RDSInstanceAppSecret
+  vpc:
+    securityGroupIds:
+      - Ref: LambdaExecutionSecurityGroup
+    subnetIds:
+      - Ref: PrivateSubnet1
+      - Ref: PrivateSubnet2
 
 functions:
   bot:
@@ -39,16 +59,189 @@ custom:
 
 resources:
   Resources:
-    UserSettings:
-      Type: AWS::DynamoDB::Table
+    PrivateVPC:
+      Type: AWS::EC2::VPC
       Properties:
-        TableName: UserSettings
-        AttributeDefinitions:
-          - AttributeName: userId
-            AttributeType: S
-        KeySchema:
-          - AttributeName: userId
-            KeyType: HASH
-        ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
+        CidrBlock: 10.0.0.0/16
+    PrivateSubnet1:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId:
+          Ref: PrivateVPC
+        CidrBlock: 10.0.1.0/24
+        AvailabilityZone:
+          Fn::Select:
+            - 0
+            - Fn::GetAZs: ""
+
+    PrivateSubnet2:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId:
+          Ref: PrivateVPC
+        CidrBlock: 10.0.2.0/24
+        AvailabilityZone:
+          Fn::Select:
+            - 1
+            - Fn::GetAZs: ""
+    PublicSubnet:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId:
+          Ref: PrivateVPC
+        CidrBlock: 10.0.3.0/24
+        AvailabilityZone:
+          Fn::Select:
+            - 0
+            - Fn::GetAZs: ""
+        MapPublicIpOnLaunch: true
+    DBSubnetGroup:
+      Type: AWS::RDS::DBSubnetGroup
+      Properties:
+        DBSubnetGroupDescription: Subnet group for RDS instance
+        SubnetIds:
+          - Ref: PrivateSubnet1
+          - Ref: PrivateSubnet2
+    InternetGateway:
+      Type: AWS::EC2::InternetGateway
+
+    VPCGatewayAttachment:
+      Type: AWS::EC2::VPCGatewayAttachment
+      Properties:
+        VpcId:
+          Ref: PrivateVPC
+        InternetGatewayId:
+          Ref: InternetGateway
+
+    PublicRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId:
+          Ref: PrivateVPC
+
+    PublicRoute:
+      Type: AWS::EC2::Route
+      DependsOn: VPCGatewayAttachment
+      Properties:
+        RouteTableId:
+          Ref: PublicRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        GatewayId:
+          Ref: InternetGateway
+
+    PublicSubnetRouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId:
+          Ref: PublicSubnet
+        RouteTableId:
+          Ref: PublicRouteTable
+
+    NATGatewayEIP:
+      Type: "AWS::EC2::EIP"
+      DependsOn: "VPCGatewayAttachment"
+      Properties:
+        Domain: vpc
+
+    NATGateway:
+      Type: "AWS::EC2::NatGateway"
+      Properties:
+        AllocationId: !GetAtt NATGatewayEIP.AllocationId
+        SubnetId: !Ref PublicSubnet
+
+    PrivateRouteTable:
+      Type: "AWS::EC2::RouteTable"
+      Properties:
+        VpcId: !Ref PrivateVPC
+
+    PrivateRoute:
+      Type: "AWS::EC2::Route"
+      Properties:
+        RouteTableId: !Ref PrivateRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        NatGatewayId: !Ref NATGateway
+
+    PrivateSubnet1RouteTableAssociation:
+      Type: "AWS::EC2::SubnetRouteTableAssociation"
+      Properties:
+        SubnetId: !Ref PrivateSubnet1
+        RouteTableId: !Ref PrivateRouteTable
+
+    PrivateSubnet2RouteTableAssociation:
+      Type: "AWS::EC2::SubnetRouteTableAssociation"
+      Properties:
+        SubnetId: !Ref PrivateSubnet2
+        RouteTableId: !Ref PrivateRouteTable
+
+    RDSInstance:
+      Type: AWS::RDS::DBInstance
+      Properties:
+        Engine: postgres
+        # EngineVersion: 15.3
+        MasterUsername: !Sub '{{resolve:secretsmanager:${RDSInstanceMasterSecret}::username}}'
+        MasterUserPassword: !Sub '{{resolve:secretsmanager:${RDSInstanceMasterSecret}::password}}'
+        DBInstanceIdentifier: goes-notify-bot-db
+        AllocatedStorage: 20
+        DBInstanceClass: db.t4g.micro
+        VPCSecurityGroups: 
+          - !GetAtt DBSecurityGroup.GroupId
+        DBSubnetGroupName:
+          Ref: DBSubnetGroup
+
+    RDSInstanceMasterSecret:
+      Type: AWS::SecretsManager::Secret
+      Properties:
+        Name: goes-notify-bot-db-credentials
+        GenerateSecretString:
+          SecretStringTemplate: '{"username": "goesAdmin"}'
+          GenerateStringKey: "password"
+          PasswordLength: 22
+          ExcludeCharacters: '"@/\\'
+
+    SecretRDSInstanceAttachmentMaster:
+      Type: AWS::SecretsManager::SecretTargetAttachment
+      Properties:
+        SecretId: !Ref RDSInstanceMasterSecret
+        TargetId: !Ref RDSInstance
+        TargetType: AWS::RDS::DBInstance
+
+    SecretRDSInstanceAttachmentApp:
+      Type: AWS::SecretsManager::SecretTargetAttachment
+      Properties:
+        SecretId: !Ref RDSInstanceAppSecret
+        TargetId: !Ref RDSInstance
+        TargetType: AWS::RDS::DBInstance
+
+    RDSInstanceAppSecret:
+      Type: AWS::SecretsManager::Secret
+      Properties:
+        Name: goes-notify-bot-app-db-credentials
+        GenerateSecretString:
+          SecretStringTemplate: '{"username": "goesapp"}'
+          GenerateStringKey: "password"
+          PasswordLength: 22
+          ExcludeCharacters: '"@/\\'
+
+    DBSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Security Group for PostgreSQL DB
+        VpcId:
+          Ref: PrivateVPC
+        SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 10.0.0.0/16
+
+    LambdaExecutionSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Security Group for Lambda functions
+        VpcId:
+          Ref: PrivateVPC
+        SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 10.0.0.0/16
