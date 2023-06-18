@@ -47,9 +47,10 @@ The lambda function will interact with the GOES API to check for available appoi
 
 ### Database
 
-#### Selected database and ORM
+#### Selected database
  * postgres
  * pgtyped https://pgtyped.dev/
+ * migrations - decided to run manually from EC2 instance for now, storing sql files in migrations folder
 
 ### Considered databases
 
