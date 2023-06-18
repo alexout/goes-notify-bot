@@ -36,13 +36,11 @@ psql -U goesAdmin -h goes-notify-bot-db.comflmc7wvz7.us-east-1.rds.amazonaws.com
 
 9. Create app user
 ```
-postgres=> drop database goes;
-DROP DATABASE
-postgres=> create user goesApp with encrypted password '<password from secret>';
+postgres=> create user goesapp with encrypted password '<password from secret>';
 CREATE ROLE
-postgres=> create database goesApp;
+postgres=> create database goesapp;
 CREATE DATABASE
-postgres=> grant all privileges on database goesApp to goesApp;
+postgres=> grant all privileges on database goesapp to goesapp;
 GRANT
 ```
 

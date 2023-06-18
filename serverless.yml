@@ -191,7 +191,7 @@ resources:
       Properties:
         Name: goes-notify-bot-db-credentials
         GenerateSecretString:
-          SecretStringTemplate: '{"username": "goesadmin"}'
+          SecretStringTemplate: '{"username": "goesAdmin"}'
           GenerateStringKey: "password"
           PasswordLength: 22
           ExcludeCharacters: '"@/\\'
