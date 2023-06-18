@@ -20,8 +20,11 @@ async function getPostgresCredentials(): Promise<{ username: string; password: s
   if (!secret.SecretString) {
     throw new Error('Failed to retrieve PostgreSQL secret.');
   }
-
   const { username, password, host, port, dbInstanceIdentifier } = JSON.parse(secret.SecretString);
+  if (!username || !password || !host || !dbInstanceIdentifier || port === undefined) {
+    throw new Error('Failed to retrieve necessary Postgres credentials, some variables are not set in the secret');
+  }  
+  
   return { username, password, host, port, dbInstanceIdentifier };
 }
   
@@ -78,13 +81,13 @@ const configureScene = new Scenes.WizardScene<Scenes.WizardContext>('configure',
     }
     const currentAppointmentDate = (ctx.wizard.state as ConfigurationWizardState).appointmentDate;
 
-    const { username, password, host, port } = await getPostgresCredentials();
-    const connectionString = `postgres://${username}:${password}@${host}:${port}/${username}`;
-    const pool = await createPool(connectionString, {
-      ssl: { rejectUnauthorized: false }, // Adjust SSL options as needed
-    });
-
     try {
+      const { username, password, host, port } = await getPostgresCredentials();
+      const encodedPassword = encodeURIComponent(password);
+      const connectionString = `postgres://${username}:${encodedPassword}@${host}:${port}/${username}`;
+      const pool = await createPool(connectionString, {
+        ssl: { rejectUnauthorized: false }, // Adjust SSL options as needed
+      });
       await pool.connect( async (connection) => {
         return connection.query(sql.typeAlias('void')`
           INSERT INTO settings (userId, locationId, currentAppointmentDate)
