@@ -1,6 +1,7 @@
 import { Telegraf, Scenes, session } from 'telegraf';
 import serverless from 'serverless-http';
-import { createPool, sql } from 'slonik';
+import { getConnectedClient } from './db';
+import { settingsInsertQuery } from './queries';
 import { SecretsManager } from 'aws-sdk';
 import moment from 'moment';
 
@@ -82,24 +83,16 @@ const configureScene = new Scenes.WizardScene<Scenes.WizardContext>('configure',
     const currentAppointmentDate = (ctx.wizard.state as ConfigurationWizardState).appointmentDate;
 
     try {
-      const { username, password, host, port } = await getPostgresCredentials();
-      const encodedPassword = encodeURIComponent(password);
-      const connectionString = `postgres://${username}:${encodedPassword}@${host}:${port}/${username}`;
-      const pool = await createPool(connectionString, {
-        ssl: { rejectUnauthorized: false }, // Adjust SSL options as needed
-      });
-      await pool.connect( async (connection) => {
-        return connection.query(sql.typeAlias('void')`
-          INSERT INTO settings (userId, locationId, currentAppointmentDate)
-          VALUES (${userId}, ${locationId}, ${currentAppointmentDate})
-          ON CONFLICT (userId) DO UPDATE
-          SET locationId = excluded.locationId,
-              currentAppointmentDate = excluded.currentAppointmentDate
-        `);
-      });
-      ctx.reply(`All set! I will check for availability every 5 minutes and will send a message if I find something earlier than ${currentAppointmentDate}.`);
+      const client = await getConnectedClient();
+      await settingsInsertQuery.run({
+        userId,
+        locationId,
+        currentAppointmentDate
+      }, client);
+      ctx.reply(`All set! I will check for availability every 5 minutes and will send a message if I find something earlier than ${currentAppointmentDate}.`);  
+      await client.end();    
     } catch (err) {
-      console.error('Slonik error:', err);
+      console.error('pg error:', err);
       ctx.reply('Failed to save the configuration. Please try again later.');
     }
       ctx.scene.leave();

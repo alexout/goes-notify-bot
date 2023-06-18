@@ -49,14 +49,15 @@ The lambda function will interact with the GOES API to check for available appoi
 
 #### Selected database and ORM
  * postgres
- * Slonik
+ * pgtyped https://pgtyped.dev/
 
 ### Considered databases
 
 ### Considered ORMs
+* Slonik - tried implementing, but ran into issues with using sql tagging, wish it had better documentation
 * sequelize - connection pooling setup in lambda (is complicated)[https://sequelize.org/docs/v6/other-topics/aws-lambda/]
 * typeORM - too complicataed for the task
-* knexjs
+* knexjs - just a query builder, not solving any problems from my point of view
 
 #### NOT using DynamoDB
 Original implementation was done with DynamoDB 
